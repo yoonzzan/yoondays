@@ -1,0 +1,7 @@
+{
+  "name": "yoon English Day",
+  "description": "An application to help users practice English by generating diary entries from keywords. It includes features for text-to-speech playback with adjustable speed to improve listening skills.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
