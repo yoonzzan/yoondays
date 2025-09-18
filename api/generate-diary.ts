@@ -1,31 +1,7 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
 
-// This function will be deployed as a serverless function on Vercel
-export default async function handler(request: Request) {
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const { keywords } = await request.json();
-
-  if (!keywords) {
-    return new Response(JSON.stringify({ error: 'Keywords are required.' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  if (!process.env.API_KEY) {
-    return new Response(JSON.stringify({ error: 'API key is not configured.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const DIARY_GENERATION_PROMPT = (keywords: string) => `You are a friendly and insightful English writing coach. Your goal is to help a user transform their daily keywords into a beautiful, natural-sounding diary entry. The user is an English learner who wants to see how their simple keywords can become a more expressive and vivid story.
+const DIARY_GENERATION_PROMPT = (keywords: string) => `You are a friendly and insightful English writing coach. Your goal is to help a user transform their daily keywords into a beautiful, natural-sounding diary entry. The user is an English learner who wants to see how their simple keywords can become a more expressive and vivid story.
 
 Here are the user's keywords for the day: "${keywords}"
 
@@ -39,17 +15,33 @@ Your task is to:
 
 Return the result as a single JSON array, where each object in the array contains an "englishSentence" and its corresponding "koreanSentence".`;
 
-  const DIARY_SCHEMA = {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        englishSentence: { type: Type.STRING },
-        koreanSentence: { type: Type.STRING },
-      },
-      required: ['englishSentence', 'koreanSentence'],
+const DIARY_SCHEMA = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      englishSentence: { type: Type.STRING },
+      koreanSentence: { type: Type.STRING },
     },
-  };
+    required: ['englishSentence', 'koreanSentence'],
+  },
+};
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  const { keywords } = req.body;
+
+  if (!keywords) {
+    return res.status(400).json({ error: 'Keywords are required.' });
+  }
+
+  if (!process.env.API_KEY) {
+    return res.status(500).json({ error: 'API key is not configured.' });
+  }
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -58,18 +50,20 @@ Return the result as a single JSON array, where each object in the array contain
       contents: DIARY_GENERATION_PROMPT(keywords),
       config: { responseMimeType: 'application/json', responseSchema: DIARY_SCHEMA },
     });
-    const resultText = response.text.trim();
-    const sentences = JSON.parse(resultText);
+    
+    let sentences;
+    try {
+        sentences = JSON.parse(response.text.trim());
+    } catch (parseError) {
+        console.error('Failed to parse Gemini API response:', response.text);
+        throw new Error('API returned invalid JSON format.');
+    }
 
-    return new Response(JSON.stringify(sentences), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(200).json(sentences);
+
   } catch (error) {
-    console.error('Error calling Gemini API:', error);
-    return new Response(JSON.stringify({ error: 'Failed to generate diary from API.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    console.error('Error in generate-diary handler:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    return res.status(500).json({ error: 'Failed to generate diary from API.', details: errorMessage });
   }
 }
