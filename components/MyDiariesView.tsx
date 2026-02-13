@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import DiaryDisplay from './DiaryDisplay';
 
+interface DiarySentence {
+  english: string;
+  korean: string;
+}
+
 interface DiaryEntry {
   date: string;
-  englishDiary: string;
-  koreanDiary: string;
+  sentences: DiarySentence[];
 }
 
 interface MyDiariesViewProps {
@@ -28,7 +32,7 @@ const MyDiariesView: React.FC<MyDiariesViewProps> = ({ diaries, speechRate, setS
       day: 'numeric',
     });
   };
-  
+
   if (selectedDiary) {
     return (
       <div className="animate-fade-in">
@@ -41,13 +45,13 @@ const MyDiariesView: React.FC<MyDiariesViewProps> = ({ diaries, speechRate, setS
           </svg>
           Back to List
         </button>
-        <DiaryDisplay 
-          englishDiary={selectedDiary.englishDiary}
-          koreanDiary={selectedDiary.koreanDiary}
+        <DiaryDisplay
+          diarySentences={selectedDiary.sentences}
           speechRate={speechRate}
           setSpeechRate={setSpeechRate}
           isGenerating={false}
-          onGrammarCheck={() => {}} // No-op for saved diaries
+          onGrammarCheck={() => { }} // No-op for saved diaries
+          onCloseGrammarCheck={() => { }} // No-op for saved diaries
           grammarCheckResult={null}
           isCheckingGrammar={false}
         />
@@ -65,16 +69,23 @@ const MyDiariesView: React.FC<MyDiariesViewProps> = ({ diaries, speechRate, setS
       ) : (
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
           {diaries.map((diary) => (
-            <div
+            <button
               key={diary.date}
               onClick={() => setSelectedDiary(diary)}
-              className="bg-slate-50 p-4 rounded-lg cursor-pointer hover:bg-sky-100 hover:shadow-md transition-all border border-slate-200"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedDiary(diary);
+                }
+              }}
+              className="w-full text-left bg-slate-50 p-4 rounded-lg cursor-pointer hover:bg-sky-100 hover:shadow-md transition-all border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+              aria-label={`View diary from ${formatDate(diary.date)}`}
             >
               <p className="font-semibold text-sky-700">{formatDate(diary.date)}</p>
               <p className="text-gray-600 mt-2 text-sm truncate">
-                {diary.englishDiary}
+                {diary.sentences[0]?.english || 'No content'}
               </p>
-            </div>
+            </button>
           ))}
         </div>
       )}

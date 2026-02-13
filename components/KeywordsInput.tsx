@@ -45,7 +45,7 @@ const KeywordsInput: React.FC<KeywordsInputProps> = ({ keywords, setKeywords, on
         }
         setIsRecording(false);
       };
-      
+
       recognition.onend = () => {
         setIsRecording(false);
       };
@@ -82,15 +82,14 @@ const KeywordsInput: React.FC<KeywordsInputProps> = ({ keywords, setKeywords, on
         <textarea
           value={keywords}
           onChange={(e) => setKeywords(e.target.value)}
-          placeholder={isRecording ? "Listening..." : "Enter keywords about your day... (e.g., sunny, walk in the park, coffee with friends)"}
+          placeholder={isRecording ? "듣고 있어요..." : "오늘 하루에 대한 키워드를 입력하세요... (예: 맑음, 공원 산책, 친구와 커피)"}
           className="w-full h-full p-4 pr-12 bg-slate-800 border border-slate-700 rounded-lg resize-none text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors"
         />
-        <button 
+        <button
           onClick={handleMicClick}
-          className={`absolute top-4 right-4 transition-colors ${
-            isRecording ? 'text-red-500 animate-pulse' : 'text-slate-400 hover:text-white'
-          }`}
-          aria-label={isRecording ? "Stop recording" : "Start recording"}
+          className={`absolute top-4 right-4 transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-slate-400 hover:text-white'
+            }`}
+          aria-label={isRecording ? "녹음 중지" : "녹음 시작"}
         >
           <MicIcon />
         </button>
