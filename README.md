@@ -78,4 +78,4 @@
 ---
 
 ## 📝 라이선스 (License)
-This project is licensed under the MIT License.
+Copyright © 2025 yoonzzan. All rights reserved.

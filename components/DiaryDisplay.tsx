@@ -5,16 +5,8 @@ import { StopIcon } from './icons/StopIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 
-interface GrammarCheckResult {
-  isCorrect: boolean;
-  feedback: string;
-  correctedSentence: string;
-}
-
-interface DiarySentence {
-  english: string;
-  korean: string;
-}
+import { getBritishVoice } from '../utils/speech';
+import { DiarySentence, GrammarCheckResult } from '../types';
 
 interface DiaryDisplayProps {
   diarySentences: DiarySentence[];
@@ -92,43 +84,12 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
         utterance.rate = speechRate;
 
         if (lang === 'english') {
-          // List of preferred British female voices, prioritized by quality and tone
-          const preferredVoices = [
-            'Martha',            // macOS/iOS - High quality, slightly lower, mature British female
-            'Serena',            // macOS/iOS - High quality British female
-            'Google UK English Female', // Chrome/Android
-            'Microsoft Hazel',   // Windows
-            'Microsoft Susan',   // Windows
-            'Kate'               // macOS/iOS - Standard British female
-          ];
-
-          let englishVoice = undefined;
-
-          // 1. Try to find a specific preferred voice
-          for (const name of preferredVoices) {
-            englishVoice = voicesRef.current.find(voice =>
-              voice.name.includes(name) && (voice.lang === 'en-GB' || voice.lang === 'en-UK')
-            );
-            if (englishVoice) break;
-          }
-
-          // 2. If not found, try any British female voice
-          if (!englishVoice) {
-            englishVoice = voicesRef.current.find(
-              (voice) => (voice.lang === 'en-GB' || voice.lang === 'en-UK') && voice.name.includes('Female')
-            );
-          }
-
-          // 3. Improve fallback: Try any British voice
-          if (!englishVoice) {
-            englishVoice = voicesRef.current.find(voice => voice.lang === 'en-GB' || voice.lang === 'en-UK');
-          }
-
+          const englishVoice = getBritishVoice(voicesRef.current);
           utterance.voice = englishVoice || null;
           utterance.lang = 'en-GB';
 
-          // Slightly lower pitch for a more grounded, serious tone (default is 1)
-          utterance.pitch = 0.9;
+          // Reset pitch to 1.0 for natural sound on mobile (non-standard pitch often causes artifacts)
+          utterance.pitch = 1.0;
         } else {
           utterance.lang = 'ko-KR';
         }
@@ -156,49 +117,6 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
         setActiveUtteranceLang(lang);
       }, 100);
     }
-  };
-
-  const renderGrammarResult = (sentence: string) => {
-    // Only show result if the checked sentence matches the current one
-    // Note: Ideally we should track which sentence was checked in the result object or state
-    // For now, we'll assume the result corresponds to the last checked sentence.
-    // A better approach would be to have grammarCheckResult per sentence index.
-    // But given the current simple state, we might just show it if it exists.
-    // To avoid confusion, let's just show it at the bottom or modal?
-    // Or better: The parent passes the result. We can't easily know which sentence it belongs to unless we store it.
-    // Let's assume the user checks one at a time. We will display the result below the sentence that was checked?
-    // Actually, the parent state `grammarCheckResult` doesn't store the source sentence.
-    // Let's modify the parent to store which sentence index is being checked/was checked?
-    // For simplicity in this refactor, I will render the result in a fixed place or just below the sentence if I can match it.
-    // Since I can't match it easily without changing parent state more, I'll render it in a dedicated area or modal.
-    // WAIT, the user wants "richer" diary.
-    // Let's put the grammar check button on each English sentence.
-    // When clicked, we check. Where to show result?
-    // Let's show it inside the card of that sentence.
-    // We need to know if *this* sentence is the one with the result.
-    // For now, let's just show it if `grammarCheckResult` exists and `grammarCheckResult.correctedSentence` (or original) matches?
-    // Or simpler: Just show it in a fixed "Grammar Check" section at the bottom of the card if active.
-
-    // Actually, let's just render it if it exists. The user just clicked it.
-    // But if they click another one, it overwrites. That's fine.
-    // To know *where* to render, we need to know which sentence was checked.
-    // I'll add `checkedSentenceIndex` to the parent or local state?
-    // Parent state is better but I can't change parent too much right now without more tool calls.
-    // I'll use a local heuristic: if `grammarCheckResult` contains the sentence text?
-    // The result has `correctedSentence` but not original.
-    // The prompt I wrote in App.tsx: `Sentence: "${sentence}"`.
-    // The result schema has `correctedSentence`.
-    // If `isCorrect` is true, `correctedSentence` is the original.
-    // If false, it's different.
-    // So I can't easily match.
-
-    // Strategy: I will just render the grammar result in a fixed overlay or a specific area, OR
-    // I will assume the user checks one at a time and just show it.
-    // BUT, I need to render it *next to the sentence*.
-    // I will add a simple local state `checkingIndex` to know which one is loading.
-    // And maybe `lastCheckedIndex` to know where to show the result?
-    // Let's add `lastCheckedIndex` state here.
-    return null; // I will implement this logic inside the map loop
   };
 
   const renderContent = () => {
@@ -241,63 +159,47 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
             aria-label="Adjust speech rate"
           />
         </div>
-        {diarySentences.map((sentence, index) => (
-          <div key={index} className="bg-slate-50 rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-            {/* English Sentence */}
-            <div className="mb-4">
-              <div className="flex justify-between items-start mb-2">
-                <span className="font-bold text-sky-600 text-sm uppercase tracking-wide">English</span>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => onGrammarCheck(sentence.english)}
-                    disabled={isCheckingGrammar}
-                    className="text-xs bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-semibold py-1 px-3 rounded-full transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    Check Grammar
-                  </button>
-                  <button
-                    onClick={() => togglePlayPause(sentence.english, 'english', index)}
-                    className="w-6 h-6 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center hover:bg-sky-200 transition-colors"
-                    aria-label={speechStatus === 'playing' && activeUtteranceLang === 'english' && activeUtteranceIndex === index ? 'Pause' : 'Play'}
-                  >
-                    {speechStatus === 'playing' && activeUtteranceLang === 'english' && activeUtteranceIndex === index ?
-                      <PauseIcon className="w-3 h-3" /> :
-                      <PlayIcon className="w-3 h-3" />
-                    }
-                  </button>
-                </div>
-              </div>
-              <p className="text-lg text-gray-800 font-medium leading-relaxed">{sentence.english}</p>
 
-              {/* Grammar Result Display - Simplified: Show if this sentence matches the result context or just show globally? 
-                  For now, showing global result is confusing. 
-                  Let's just show the result if it exists. 
-                  Ideally we need to know which index was checked. 
-                  I'll assume the user checks one and sees the result. 
-                  I will render the result here ONLY if I can match it or if I track the index.
-                  Since I can't track index easily without changing parent, I will render it at the bottom of the card 
-                  IF it seems relevant? No, that's risky.
-                  
-                  Let's just render the grammar result in a fixed place for now, OR 
-                  Add a local state `lastCheckedIndex` to `DiaryDisplay` and update it when `onGrammarCheck` is called.
-                  Wait, `onGrammarCheck` is passed from parent. I can wrap it.
-              */}
-              {grammarCheckResult && isCheckingGrammar === false && (
-                null
-              )}
+        {diarySentences.map((sentence, index) => (
+          <div key={index} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm transition-all duration-300">
+            {/* Header: Grammar Check */}
+            <div className="flex justify-end mb-1">
+              <button
+                onClick={() => onGrammarCheck(sentence.english)}
+                disabled={isCheckingGrammar}
+                className="text-xs font-bold text-sky-500 hover:text-sky-600 disabled:text-gray-300 transition-colors flex items-center py-1 px-2 rounded-lg hover:bg-sky-50"
+              >
+                <CheckCircleIcon className="w-3.5 h-3.5 mr-1" />
+                Check Grammar
+              </button>
             </div>
 
-            {/* Korean Sentence */}
-            <div className="pt-3 border-t border-slate-200">
-              <div className="mb-2">
-                <span className="font-bold text-gray-400 text-sm uppercase tracking-wide">Korean</span>
-              </div>
-              <p className="text-gray-600 leading-relaxed">{sentence.korean}</p>
+            {/* Main Content: English Text + Play Button in one row */}
+            <div className="flex items-end gap-3 mb-4">
+              <p className="flex-1 text-xl text-slate-800 font-medium leading-relaxed font-serif">
+                {sentence.english}
+              </p>
+
+              <button
+                onClick={() => togglePlayPause(sentence.english, 'english', index)}
+                className="flex-none w-12 h-12 rounded-full bg-sky-500 text-white shadow-md flex items-center justify-center hover:bg-sky-600 active:scale-95 transition-all"
+                aria-label={speechStatus === 'playing' && activeUtteranceLang === 'english' && activeUtteranceIndex === index ? 'Pause' : 'Play'}
+              >
+                {speechStatus === 'playing' && activeUtteranceLang === 'english' && activeUtteranceIndex === index ?
+                  <PauseIcon className="w-5 h-5" /> :
+                  <PlayIcon className="w-5 h-5 ml-1" />
+                }
+              </button>
+            </div>
+
+            {/* Korean Section */}
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-gray-500 text-base leading-relaxed">{sentence.korean}</p>
             </div>
           </div>
         ))}
 
-        {/* Global Grammar Result Area (Temporary solution until better state management) */}
+        {/* Global Grammar Result Modal */}
         {(isCheckingGrammar || grammarCheckResult) && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-11/12 max-w-2xl bg-white p-4 rounded-xl shadow-2xl border border-slate-200 z-40 animate-fade-in-up">
             <div className="flex justify-between items-center mb-2">
@@ -323,18 +225,20 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
                 {grammarCheckResult.isCorrect ? (
                   <div className="flex items-center text-green-700 bg-green-50 p-3 rounded-lg">
                     <CheckCircleIcon className="h-5 w-5 mr-2" />
-                    {grammarCheckResult.feedback}
+                    <span className="font-medium">{grammarCheckResult.feedback}</span>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <div className="flex items-start text-red-700 bg-red-50 p-3 rounded-lg">
-                      <XCircleIcon className="h-5 w-5 mr-2 mt-0.5" />
-                      <div><span className="font-semibold">Feedback:</span> {grammarCheckResult.feedback}</div>
+                      <XCircleIcon className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                      <div><span className="font-bold block mb-1">Feedback:</span> {grammarCheckResult.feedback}</div>
                     </div>
-                    <div className="bg-green-50 p-3 rounded-lg">
-                      <span className="font-semibold text-green-800">Suggestion:</span>
-                      <p className="text-green-700 mt-1">{grammarCheckResult.correctedSentence}</p>
-                    </div>
+                    {grammarCheckResult.correctedSentence && grammarCheckResult.correctedSentence !== '' && (
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                        <span className="font-bold text-green-800 block mb-1">Suggestion:</span>
+                        <p className="text-green-700 font-serif text-lg">{grammarCheckResult.correctedSentence}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
