@@ -39,32 +39,22 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
 
   useEffect(() => {
-    const loadVoices = () => {
-      voicesRef.current = window.speechSynthesis.getVoices();
-    };
-
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    loadVoices();
-
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    loadVoices();
-
-    return () => {
-      window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
-      window.speechSynthesis.cancel();
-    };
-  }, []);
-
-  // Update current voice name whenever gender or voices change
-  useEffect(() => {
     const updateVoiceName = () => {
+      voicesRef.current = window.speechSynthesis.getVoices();
       const voice = getBritishVoice(voicesRef.current, voiceGender);
       setCurrentVoiceName(voice ? `${voice.name} (${voice.lang})` : 'Default / Not found');
     };
 
+    // Initial load attempt
     updateVoiceName();
+
+    // Listener for async loading
     window.speechSynthesis.addEventListener('voiceschanged', updateVoiceName);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', updateVoiceName);
+
+    return () => {
+      window.speechSynthesis.removeEventListener('voiceschanged', updateVoiceName);
+      window.speechSynthesis.cancel();
+    };
   }, [voiceGender]);
 
   const handleStop = () => {

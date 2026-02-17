@@ -9,17 +9,17 @@ export const getBritishVoice = (
     // Preferred voices by gender
     const preferredVoices = {
         female: [
-            'Martha',            // iOS/macOS - High quality female
-            'Serena',            // iOS/macOS - High quality female
-            'Stephanie',         // UK Female
-            'Kate',              // iOS/macOS - Standard female
-            'Catherine',         // iOS - Newer standard female
-            'Tessa',             // Older Mac female
+            'Kate',              // iOS High Quality
+            'Serena',            // iOS High Quality
+            'Stephanie',         // iOS High Quality
+            'Martha',            // iOS Standard
+            'Catherine',         // iOS Newer Standard
+            'Tessa',             // macOS older
             'Google UK English Female' // Chrome/Android
         ],
         male: [
-            'Daniel',            // iOS/macOS - Standard British Male
-            'Arthur',            // iOS/macOS - Alternative British Male
+            'Daniel',            // iOS/macOS Standard
+            'Arthur',            // iOS/macOS Alternative
             'Gordon',            // Mac Male
             'Google UK English Male' // Chrome/Android
         ]
@@ -35,18 +35,26 @@ export const getBritishVoice = (
             (voice.name.includes('Premium') || voice.name.includes('Enhanced')) &&
             (voice.lang === 'en-GB' || voice.lang === 'en-UK')
         );
-        if (englishVoice) break;
+        if (englishVoice) return englishVoice;
     }
 
-    // 2. If no premium/enhanced voice, try specific preferred names (Standard quality)
-    if (!englishVoice) {
-        for (const name of targetNames) {
-            englishVoice = voices.find(voice =>
-                voice.name.includes(name) &&
-                (voice.lang === 'en-GB' || voice.lang === 'en-UK')
-            );
-            if (englishVoice) break;
-        }
+    // 2. Try to find preferred voices that are 'localService' (usually higher quality/downloaded)
+    for (const name of targetNames) {
+        englishVoice = voices.find(voice =>
+            voice.name.includes(name) &&
+            voice.localService === true &&
+            (voice.lang === 'en-GB' || voice.lang === 'en-UK')
+        );
+        if (englishVoice) return englishVoice;
+    }
+
+    // 3. Fallback to any preferred voice name (Standard quality)
+    for (const name of targetNames) {
+        englishVoice = voices.find(voice =>
+            voice.name.includes(name) &&
+            (voice.lang === 'en-GB' || voice.lang === 'en-UK')
+        );
+        if (englishVoice) return englishVoice;
     }
 
     // 3. Fallback: Any voice with Gender in the name (Best attempt for unknown voices)
