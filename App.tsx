@@ -1,48 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Header from './components/Header';
 import KeywordsInput from './components/KeywordsInput';
 import DiaryDisplay from './components/DiaryDisplay';
 import BottomNav from './components/BottomNav';
 import MyDiariesView from './components/MyDiariesView';
-import { GoogleGenAI } from '@google/genai';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 
 import { DiarySentence, DiaryEntry, GrammarCheckResult } from './types';
-import { getDiaryGenerationConfig, getGrammarCheckConfig } from './utils/prompts';
+import { generateDiary, checkGrammar } from './services/gemini';
+import { useDiaryStorage } from './hooks/useDiaryStorage';
 
 const App: React.FC = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const [keywords, setKeywords] = useState('');
   const [diarySentences, setDiarySentences] = useState<DiarySentence[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [speechRate, setSpeechRate] = useState(1.0);
   const [activeTab, setActiveTab] = useState<'today' | 'myDiaries'>('today');
-  const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [grammarCheckResult, setGrammarCheckResult] = useState<GrammarCheckResult | null>(null);
   const [isCheckingGrammar, setIsCheckingGrammar] = useState(false);
+  const [level, setLevel] = useState<'beginner' | 'advanced'>('advanced');
 
-  // Load diaries from localStorage on mount
-  useEffect(() => {
-    try {
-      const savedDiaries = localStorage.getItem('myEnglishDayDiaries');
-      if (savedDiaries) {
-        setDiaries(JSON.parse(savedDiaries));
-      }
-    } catch (e) {
-      console.error("Failed to load diaries from local storage", e);
-    }
-  }, []);
-
-  // Save diaries to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem('myEnglishDayDiaries', JSON.stringify(diaries));
-    } catch (e) {
-      console.error("Failed to save diaries to local storage", e);
-    }
-  }, [diaries]);
+  // Custom hook for diary storage management
+  const { diaries, addDiaryEntry: saveToStorage } = useDiaryStorage();
 
   const handleSaveDiary = () => {
     if (diarySentences.length === 0) return;
@@ -53,21 +34,10 @@ const App: React.FC = () => {
     const newEntry: DiaryEntry = {
       date: dateKey,
       sentences: diarySentences,
+      originalContent: keywords,
     };
 
-    setDiaries((prevDiaries: DiaryEntry[]) => {
-      const existingIndex = prevDiaries.findIndex((d: DiaryEntry) => d.date === dateKey);
-
-      if (existingIndex !== -1) {
-        const updatedDiaries = [...prevDiaries];
-        updatedDiaries[existingIndex] = newEntry;
-        return updatedDiaries;
-      } else {
-        // Add new entries to the beginning, but sort by date descending
-        const sortedDiaries = [newEntry, ...prevDiaries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return sortedDiaries;
-      }
-    });
+    saveToStorage(newEntry);
 
     setToastMessage('Diary entry saved successfully!');
     setTimeout(() => setToastMessage(null), 3000);
@@ -79,79 +49,35 @@ const App: React.FC = () => {
       return;
     }
 
-    if (!apiKey) {
-      setError('API key is not configured. Please check your .env.local file.');
-      return;
-    }
-
     setIsGenerating(true);
     setError(null);
     setDiarySentences([]);
     setGrammarCheckResult(null); // Reset grammar check on new generation
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
-
-      const { schema, prompt } = getDiaryGenerationConfig(keywords);
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-        },
-      });
-
-      const resultText = response.text?.trim();
-      if (!resultText) {
-        throw new Error('No text generated.');
-      }
-      const result = JSON.parse(resultText);
-
-      if (result.sentences && Array.isArray(result.sentences)) {
-        setDiarySentences(result.sentences);
-      } else {
-        throw new Error('Invalid response format from API.');
-      }
-    } catch (err) {
+      const sentences = await generateDiary(keywords, level);
+      setDiarySentences(sentences);
+    } catch (err: any) {
       console.error('Error generating diary:', err);
-      setError('Sorry, something went wrong while generating the diary. Please try again.');
+      setError(err.message || 'Sorry, something went wrong while generating the diary. Please try again.');
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleGrammarCheck = async (sentence: string) => {
-    if (!sentence || !apiKey) return;
+    if (!sentence) return;
 
     setIsCheckingGrammar(true);
     setGrammarCheckResult(null);
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const { schema, prompt } = getGrammarCheckConfig(sentence);
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-        },
-      });
-
-      const resultText = response.text?.trim();
-      if (!resultText) {
-        throw new Error('No feedback generated.');
-      }
-      const result = JSON.parse(resultText);
+      const result = await checkGrammar(sentence);
       setGrammarCheckResult(result);
-
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error checking grammar:', err);
-      setError('Sorry, an error occurred while checking grammar.');
+      setError(err.message || 'Sorry, an error occurred while checking grammar.');
     } finally {
       setIsCheckingGrammar(false);
     }
@@ -172,6 +98,8 @@ const App: React.FC = () => {
               setKeywords={setKeywords}
               onGenerate={handleGenerateDiary}
               isGenerating={isGenerating}
+              level={level}
+              setLevel={setLevel}
             />
             <div className="flex flex-col">
               {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">{error}</div>}

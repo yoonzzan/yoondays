@@ -8,6 +8,7 @@ export interface DiarySentence {
 export interface DiaryEntry {
     date: string; // Storing date as 'YYYY-MM-DD' string for consistency
     sentences: DiarySentence[];
+    originalContent?: string; // The user's original input keywords/sentences
 }
 
 // Defines the result of a grammar check

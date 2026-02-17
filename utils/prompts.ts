@@ -1,6 +1,6 @@
 import { Schema, Type } from '@google/genai';
 
-export const getDiaryGenerationConfig = (keywords: string) => {
+export const getDiaryGenerationConfig = (keywords: string, level: 'beginner' | 'advanced' = 'advanced') => {
     const schema: Schema = {
         type: Type.OBJECT,
         properties: {
@@ -25,7 +25,25 @@ export const getDiaryGenerationConfig = (keywords: string) => {
         required: ['sentences'],
     };
 
-    const prompt = `You are a warm, sophisticated British English writing coach. Your goal is to help a user transform their daily keywords into a beautiful, natural-sounding diary entry in British English. The user is an English learner.
+    let prompt = '';
+
+    if (level === 'beginner') {
+        prompt = `You are a helpful British English tutor. Your goal is to help a user write a diary entry in very simple, easy-to-understand British English (CEFR Level A1-A2).
+
+Here are the user's keywords for the day: "${keywords}"
+
+Your task is to:
+1.  **Write a simple British English diary entry (5-7 sentences):**
+    *   **Focus on Simplicity:** Use basic vocabulary and short, clear sentences that a beginner can easily understand.
+    *   **Tone:** Keep it natural and polite, but not childish. It should sound like a normal daily log.
+    *   **British English:** Use British spelling (e.g., 'colour', 'favourite', 'centre') and simple British terms (e.g., 'holiday', 'flat') where appropriate.
+    *   Avoid complex grammar structures (like passive voice or complex relative clauses).
+
+2.  **Provide a natural Korean translation** for each sentence, using polite language (e.g., 해요체).
+
+Return the result as a JSON object containing an array of sentence pairs.`;
+    } else {
+        prompt = `You are a warm, sophisticated British English writing coach. Your goal is to help a user transform their daily keywords into a beautiful, natural-sounding diary entry in British English. The user is an English learner aiming for a mature, native-like style.
 
 Here are the user's keywords for the day: "${keywords}"
 
@@ -39,6 +57,7 @@ Your task is to:
 2.  **Provide a natural Korean translation** for each sentence.
 
 Return the result as a JSON object containing an array of sentence pairs.`;
+    }
 
     return { schema, prompt };
 };
