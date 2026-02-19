@@ -36,13 +36,40 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
   const [activeUtteranceLang, setActiveUtteranceLang] = useState<'english' | 'korean' | null>(null);
   const [voiceGender, setVoiceGender] = useState<'female' | 'male'>('female');
   const [currentVoiceName, setCurrentVoiceName] = useState<string>('');
+  const [userSelectedVoiceURI, setUserSelectedVoiceURI] = useState<string | null>(null); // Manually selected voice
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]); // For dropdown
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
+
+  useEffect(() => {
+    // Load saved voice preference
+    const savedURI = localStorage.getItem('english-diary-voice-uri');
+    if (savedURI) setUserSelectedVoiceURI(savedURI);
+  }, []);
 
   useEffect(() => {
     const updateVoiceName = () => {
       voicesRef.current = window.speechSynthesis.getVoices();
-      const voice = getBritishVoice(voicesRef.current, voiceGender);
-      setCurrentVoiceName(voice ? `${voice.name} (${voice.lang})` : 'Default / Not found');
+
+      // Filter for British/English voices for the dropdown
+      const britishVoices = voicesRef.current.filter(v =>
+        v.lang.replace('_', '-').toLowerCase().startsWith('en-gb') ||
+        v.lang.replace('_', '-').toLowerCase().startsWith('en-uk')
+      );
+      setAvailableVoices(britishVoices);
+
+      let voice: SpeechSynthesisVoice | null = null;
+
+      // 1. Try User Selection first
+      if (userSelectedVoiceURI) {
+        voice = voicesRef.current.find(v => v.voiceURI === userSelectedVoiceURI) || null;
+      }
+
+      // 2. If no user selection or voice not found, use auto-selection
+      if (!voice) {
+        voice = getBritishVoice(voicesRef.current, voiceGender);
+      }
+
+      setCurrentVoiceName(voice ? `${voice.name}` : 'Default');
     };
 
     // Initial load attempt
@@ -55,7 +82,18 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
       window.speechSynthesis.removeEventListener('voiceschanged', updateVoiceName);
       window.speechSynthesis.cancel();
     };
-  }, [voiceGender]);
+  }, [voiceGender, userSelectedVoiceURI]);
+
+  const handleManualVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const uri = e.target.value;
+    if (uri === 'auto') {
+      setUserSelectedVoiceURI(null);
+      localStorage.removeItem('english-diary-voice-uri');
+    } else {
+      setUserSelectedVoiceURI(uri);
+      localStorage.setItem('english-diary-voice-uri', uri);
+    }
+  };
 
   const handleStop = () => {
     window.speechSynthesis.cancel();
@@ -96,9 +134,20 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
         }
 
         if (lang === 'english') {
-          const englishVoice = getBritishVoice(voicesRef.current, voiceGender);
+          let englishVoice: SpeechSynthesisVoice | null | undefined = null;
+
+          // 1. Try User Selection
+          if (userSelectedVoiceURI) {
+            englishVoice = voicesRef.current.find(v => v.voiceURI === userSelectedVoiceURI);
+          }
+
+          // 2. Fallback to Auto
+          if (!englishVoice) {
+            englishVoice = getBritishVoice(voicesRef.current, voiceGender);
+          }
+
           utterance.voice = englishVoice || null;
-          utterance.lang = 'en-GB';
+          utterance.lang = englishVoice?.lang || 'en-GB';
 
           // Only set pitch if necessary (some iOS versions degrade quality if pitch is explicitly set)
           // Default is 1.0, so we don't need to force it unless we want a specific effect
@@ -209,28 +258,52 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
         </div>
 
         {/* Voice Quality Debug & Guide Info */}
-        <div className="text-xs text-gray-500 px-1">
-          <div className="flex justify-between items-center">
-            <span>Voice: <span className="font-semibold text-gray-700">{currentVoiceName}</span></span>
+        <div className="text-xs text-gray-500 px-1 mt-2">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div className="flex items-center space-x-2">
+              <span className="whitespace-nowrap">Voice:</span>
+              <select
+                className="bg-white border border-gray-300 text-gray-700 text-xs rounded-md p-1.5 max-w-[220px] shadow-sm focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none"
+                value={userSelectedVoiceURI || 'auto'}
+                onChange={handleManualVoiceChange}
+              >
+                <option value="auto">Auto (Best Available)</option>
+                {availableVoices.map((voice) => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    {voice.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               onClick={() => setShowVoiceGuide(!showVoiceGuide)}
-              className="text-sky-600 underline hover:text-sky-800"
+              className="text-sky-600 underline hover:text-sky-800 text-right sm:text-left"
             >
               목소리가 이상한가요?
             </button>
           </div>
 
+          {/* Show currently active voice in Auto mode */}
+          {!userSelectedVoiceURI && (
+            <p className="mt-1 text-gray-400">
+              Active: <span className="font-medium text-gray-600">{currentVoiceName}</span>
+            </p>
+          )}
+
           {showVoiceGuide && (
             <div className="mt-2 p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-900 text-xs leading-relaxed animate-fade-in-up">
-              <p className="font-bold mb-1">📱 아이폰에서 기계음처럼 들릴 때 해결법:</p>
-              <ol className="list-decimal list-inside space-y-1 ml-1">
-                <li><strong>설정</strong> {'>'} <strong>손쉬운 사용</strong>으로 이동합니다.</li>
-                <li><strong>콘텐츠 말하기</strong> {'>'} <strong>음성</strong>을 선택합니다.</li>
-                <li><strong>영어</strong>를 선택한 후, <strong>영어 (영국)</strong> 또는 영국식 목소리를 찾습니다.</li>
-                <li>원하는 목소리(예: <strong>Serena, Kate, Stephanie</strong>)를 누릅니다.</li>
-                <li><strong>고품질(Premium/Enhanced)</strong> 버전을 다운로드(구름 아이콘)합니다.</li>
-                <li>이 페이지를 새로고침합니다.</li>
-              </ol>
+              <p className="font-bold mb-1">📱 아이폰 음성 문제 해결 가이드:</p>
+              <ul className="list-disc list-inside space-y-1 ml-1">
+                <li><strong>자동(Auto)</strong> 모드에서 'Rocko' 같은 기계음이 들리면, 위 목록에서 <strong>직접 목소리를 선택</strong>해 보세요.</li>
+                <li>목록에 원하는 목소리(Kate 등)가 없다면:
+                  <ol className="list-decimal list-inside ml-4 mt-1 text-amber-800">
+                    <li><strong>설정 &gt; 손쉬운 사용 &gt; 콘텐츠 말하기 &gt; 음성</strong>으로 이동</li>
+                    <li><strong>영어 &gt; 영어(영국)</strong>에서 Kate(Premium) 등을 다운로드</li>
+                    <li>다운로드 후 <strong>폰을 재시작</strong>하거나 앱을 새로고침하세요.</li>
+                  </ol>
+                </li>
+              </ul>
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@
  */
 const isBritish = (lang: string): boolean => {
     const normalized = lang.replace('_', '-').toLowerCase();
-    return normalized === 'en-gb' || normalized === 'en-uk';
+    return normalized.startsWith('en-gb') || normalized.startsWith('en-uk');
 };
 
 /**
@@ -75,7 +75,22 @@ export const getBritishVoice = (
         );
     }
 
-    // 4. Final Fallback: Any British voice (Last resort)
+    // 4. Final Fallback: Any British voice that is NOT novelty (Avoid Rocko, etc.)
+    if (!englishVoice) {
+        const NOVELTY_VOICES = [
+            'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
+            'Deranged', 'Good News', 'Hysterical', 'Junior', 'Kathy', 'Pipe Organ',
+            'Princess', 'Ralph', 'Trinoids', 'Whisper', 'Zarvox', 'Rocko', 'Shelley',
+            'Superstar', 'Grandma', 'Grandpa', 'Eddy', 'Flo', 'Reed', 'Sandy', 'Majed'
+        ];
+
+        englishVoice = voices.find(voice =>
+            isBritish(voice.lang) &&
+            !NOVELTY_VOICES.some(novelty => voice.name.includes(novelty))
+        );
+    }
+
+    // 5. Absolute Last Resort: Just return the first British voice found (even if novelty, better than nothing)
     if (!englishVoice) {
         englishVoice = voices.find(voice => isBritish(voice.lang));
     }
