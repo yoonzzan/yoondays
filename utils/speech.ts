@@ -1,4 +1,13 @@
 /**
+ * Helper to check if a language code is British English.
+ * Handles variations like 'en-GB', 'en_GB', 'en-UK' and case insensitivity.
+ */
+const isBritish = (lang: string): boolean => {
+    const normalized = lang.replace('_', '-').toLowerCase();
+    return normalized === 'en-gb' || normalized === 'en-uk';
+};
+
+/**
  * Selects the best available British English voice based on gender.
  */
 export const getBritishVoice = (
@@ -33,7 +42,7 @@ export const getBritishVoice = (
         englishVoice = voices.find(voice =>
             voice.name.includes(name) &&
             (voice.name.includes('Premium') || voice.name.includes('Enhanced')) &&
-            (voice.lang === 'en-GB' || voice.lang === 'en-UK')
+            isBritish(voice.lang)
         );
         if (englishVoice) return englishVoice;
     }
@@ -43,7 +52,7 @@ export const getBritishVoice = (
         englishVoice = voices.find(voice =>
             voice.name.includes(name) &&
             voice.localService === true &&
-            (voice.lang === 'en-GB' || voice.lang === 'en-UK')
+            isBritish(voice.lang)
         );
         if (englishVoice) return englishVoice;
     }
@@ -52,7 +61,7 @@ export const getBritishVoice = (
     for (const name of targetNames) {
         englishVoice = voices.find(voice =>
             voice.name.includes(name) &&
-            (voice.lang === 'en-GB' || voice.lang === 'en-UK')
+            isBritish(voice.lang)
         );
         if (englishVoice) return englishVoice;
     }
@@ -61,14 +70,14 @@ export const getBritishVoice = (
     if (!englishVoice) {
         const genderKeyword = gender === 'female' ? 'Female' : 'Male';
         englishVoice = voices.find(
-            (voice) => (voice.lang === 'en-GB' || voice.lang === 'en-UK') &&
+            (voice) => isBritish(voice.lang) &&
                 voice.name.toLowerCase().includes(genderKeyword.toLowerCase())
         );
     }
 
     // 4. Final Fallback: Any British voice (Last resort)
     if (!englishVoice) {
-        englishVoice = voices.find(voice => voice.lang === 'en-GB' || voice.lang === 'en-UK');
+        englishVoice = voices.find(voice => isBritish(voice.lang));
     }
 
     return englishVoice || null;
