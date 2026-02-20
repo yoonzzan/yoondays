@@ -63,10 +63,13 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
       // 음성 목록이 아직 비어있으면 스킵 (타이머가 재시도 예정)
       if (voicesRef.current.length === 0) return;
 
-      // 모든 영어 음성, 중복 제거
-      const allEnglish = voicesRef.current.filter(v =>
-        v.lang.replace('_', '-').toLowerCase().startsWith('en')
-      );
+      // 모든 영어 음성 필터 (언어코드 en- 또는 이름으로 알려진 영어 음성)
+      const allEnglish = voicesRef.current.filter(v => {
+        const langOk = v.lang.replace('_', '-').toLowerCase().startsWith('en');
+        // 이름으로 알 수 있는 영어 음성이면 lang코드와 무관하게 포함
+        const nameOk = classifyVoiceGender(v) !== 'unknown';
+        return langOk || nameOk;
+      });
       const deduped = deduplicateVoices(allEnglish);
 
       // 성별별 엄격하게 필터 (unknown은 별도 그룹으로)
@@ -126,11 +129,21 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
     const uri = e.target.value;
     if (uri === 'auto') {
       setUserSelectedVoiceURI(null);
+      userSelectedVoiceURIRef.current = null;
       localStorage.removeItem('english-diary-voice-uri');
     } else {
       setUserSelectedVoiceURI(uri);
+      userSelectedVoiceURIRef.current = uri;
       localStorage.setItem('english-diary-voice-uri', uri);
     }
+  };
+
+  // 성볔 탭 전환 시: 이전 선택 초기화 → Auto가 새 성볔에 맞는 최적 음성 선택
+  const handleGenderChange = (gender: 'female' | 'male') => {
+    setVoiceGender(gender);
+    setUserSelectedVoiceURI(null);
+    userSelectedVoiceURIRef.current = null;
+    localStorage.removeItem('english-diary-voice-uri');
   };
 
   const handleStop = () => {
@@ -247,7 +260,7 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
           {/* Gender Selection */}
           <div className="flex items-center space-x-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex-shrink-0 self-start sm:self-center">
             <button
-              onClick={() => setVoiceGender('female')}
+              onClick={() => handleGenderChange('female')}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${voiceGender === 'female'
                 ? 'bg-rose-100 text-rose-700 shadow-sm ring-1 ring-rose-200'
                 : 'text-gray-400 hover:bg-gray-50'
@@ -256,7 +269,7 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
               👩 Female
             </button>
             <button
-              onClick={() => setVoiceGender('male')}
+              onClick={() => handleGenderChange('male')}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${voiceGender === 'male'
                 ? 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200'
                 : 'text-gray-400 hover:bg-gray-50'
