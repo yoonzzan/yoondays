@@ -5,7 +5,7 @@ import { StopIcon } from './icons/StopIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 
-import { getBritishVoice } from '../utils/speech';
+import { getBritishVoice, isBritish, classifyVoiceGender } from '../utils/speech';
 import { DiarySentence, GrammarCheckResult } from '../types';
 
 interface DiaryDisplayProps {
@@ -50,12 +50,20 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
     const updateVoiceName = () => {
       voicesRef.current = window.speechSynthesis.getVoices();
 
-      // Filter for British/English voices for the dropdown
-      const britishVoices = voicesRef.current.filter(v =>
-        v.lang.replace('_', '-').toLowerCase().startsWith('en-gb') ||
-        v.lang.replace('_', '-').toLowerCase().startsWith('en-uk')
+      // 모든 영어 음성 중 현재 성별에 맞는 것만 필터링
+      const allEnglishVoices = voicesRef.current.filter(v =>
+        v.lang.replace('_', '-').toLowerCase().startsWith('en')
       );
-      setAvailableVoices(britishVoices);
+      const genderedVoices = allEnglishVoices.filter(v => {
+        const g = classifyVoiceGender(v);
+        return g === voiceGender || g === 'unknown';
+      });
+      // 영국식 우선 정렬
+      const sorted = [
+        ...genderedVoices.filter(v => isBritish(v.lang)),
+        ...genderedVoices.filter(v => !isBritish(v.lang)),
+      ];
+      setAvailableVoices(sorted);
 
       let voice: SpeechSynthesisVoice | null = null;
 
@@ -267,12 +275,31 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
                 value={userSelectedVoiceURI || 'auto'}
                 onChange={handleManualVoiceChange}
               >
-                <option value="auto">Auto (Best Available)</option>
-                {availableVoices.map((voice) => (
-                  <option key={voice.voiceURI} value={voice.voiceURI}>
-                    {voice.name}
-                  </option>
-                ))}
+                <option value="auto">🎯 Auto (Best Available)</option>
+                {/* 🇬🇧 영국식 발음 그룹 */}
+                {availableVoices.filter(v => isBritish(v.lang)).length > 0 && (
+                  <optgroup label="🇬🇧 영국식 발음">
+                    {availableVoices
+                      .filter(v => isBritish(v.lang))
+                      .map(v => (
+                        <option key={v.voiceURI} value={v.voiceURI}>
+                          🇬🇧 {v.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {/* 기타 영어 그룹 */}
+                {availableVoices.filter(v => !isBritish(v.lang)).length > 0 && (
+                  <optgroup label="기타 영어">
+                    {availableVoices
+                      .filter(v => !isBritish(v.lang))
+                      .map(v => (
+                        <option key={v.voiceURI} value={v.voiceURI}>
+                          {v.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 

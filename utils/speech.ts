@@ -1,99 +1,155 @@
 /**
- * Helper to check if a language code is British English.
- * Handles variations like 'en-GB', 'en_GB', 'en-UK' and case insensitivity.
+ * British English 언어 코드 여부 확인.
+ * en-GB, en-UK 계열.
  */
-const isBritish = (lang: string): boolean => {
+export const isBritish = (lang: string): boolean => {
     const normalized = lang.replace('_', '-').toLowerCase();
     return normalized.startsWith('en-gb') || normalized.startsWith('en-uk');
 };
 
 /**
- * Selects the best available British English voice based on gender.
+ * 영어 언어 코드 여부 확인 (모든 영어 변형 포함: en-US, en-AU 등).
+ */
+const isEnglish = (lang: string): boolean => {
+    return lang.replace('_', '-').toLowerCase().startsWith('en');
+};
+
+/**
+ * 여성 목소리 이름 목록 (이름 기반 성별 추정).
+ */
+const FEMALE_VOICE_NAMES = [
+    'Kate', 'Serena', 'Stephanie', 'Martha', 'Catherine', 'Tessa',
+    'Moira', 'Fiona', 'Samantha', 'Victoria', 'Susan', 'Karen',
+    'Nicky', 'Sandy', 'Ava', 'Allison', 'Alice', 'Anna', 'Shelley',
+    'Flo', 'Grandma', 'Kathy', 'Princess', 'Zarvox', 'Bells',
+    'Bubbles', 'Whisper', 'Superstar', 'Siobhan',
+];
+
+/**
+ * 남성 목소리 이름 목록 (이름 기반 성별 추정).
+ */
+const MALE_VOICE_NAMES = [
+    'Daniel', 'Arthur', 'Gordon', 'Alex', 'Fred', 'Albert',
+    'Eddy', 'Reed', 'Grandpa', 'Rocko', 'Thomas', 'Oliver', 'Rishi',
+    'Ralph', 'Junior', 'Boing', 'Deranged', 'Hysterical', 'Trinoids',
+    'Bad News', 'Good News', 'Majed', 'Cellos', 'Bahh', 'Pipe Organ',
+];
+
+/**
+ * 목소리 이름으로 성별을 추정합니다.
+ */
+export const classifyVoiceGender = (
+    voice: SpeechSynthesisVoice
+): 'female' | 'male' | 'unknown' => {
+    const name = voice.name;
+    if (FEMALE_VOICE_NAMES.some(f => name.includes(f))) return 'female';
+    if (MALE_VOICE_NAMES.some(m => name.includes(m))) return 'male';
+    // 이름 자체에 Female/Male 키워드가 있는 경우 (Google TTS 등)
+    if (name.toLowerCase().includes('female')) return 'female';
+    if (name.toLowerCase().includes('male')) return 'male';
+    return 'unknown';
+};
+
+/**
+ * Novelty/효과음 목소리 목록 (Auto 선택에서 제외).
+ */
+const NOVELTY_VOICES = [
+    'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
+    'Deranged', 'Good News', 'Hysterical', 'Junior', 'Kathy', 'Pipe Organ',
+    'Princess', 'Ralph', 'Trinoids', 'Whisper', 'Zarvox', 'Rocko', 'Shelley',
+    'Superstar', 'Grandma', 'Grandpa', 'Eddy', 'Flo', 'Reed', 'Sandy', 'Majed',
+];
+
+const isNovelty = (voice: SpeechSynthesisVoice): boolean =>
+    NOVELTY_VOICES.some(n => voice.name.includes(n));
+
+/**
+ * 최적의 영어 목소리를 선택합니다.
+ * 영국식(en-GB) 음성을 최우선으로 시도하고, 없으면 전체 영어로 폴백합니다.
  */
 export const getBritishVoice = (
     voices: SpeechSynthesisVoice[],
     gender: 'female' | 'male' = 'female'
 ): SpeechSynthesisVoice | null => {
 
-    // Preferred voices by gender
     const preferredVoices = {
-        female: [
-            'Kate',              // iOS High Quality
-            'Serena',            // iOS High Quality
-            'Stephanie',         // iOS High Quality
-            'Martha',            // iOS Standard
-            'Catherine',         // iOS Newer Standard
-            'Tessa',             // macOS older
-            'Google UK English Female' // Chrome/Android
-        ],
-        male: [
-            'Daniel',            // iOS/macOS Standard
-            'Arthur',            // iOS/macOS Alternative
-            'Gordon',            // Mac Male
-            'Google UK English Male' // Chrome/Android
-        ]
+        female: ['Kate', 'Serena', 'Stephanie', 'Martha', 'Catherine', 'Tessa', 'Google UK English Female'],
+        male: ['Daniel', 'Arthur', 'Gordon', 'Google UK English Male'],
     };
 
     const targetNames = preferredVoices[gender];
-    let englishVoice: SpeechSynthesisVoice | undefined = undefined;
+    let result: SpeechSynthesisVoice | undefined;
 
-    // 1. Try to find a preferred voice with "Premium" or "Enhanced" quality first
+    // --- 🇬🇧 영국식 음성 우선 탐색 ---
+
+    // 1. 영국식 + Premium/Enhanced 고품질
     for (const name of targetNames) {
-        englishVoice = voices.find(voice =>
-            voice.name.includes(name) &&
-            (voice.name.includes('Premium') || voice.name.includes('Enhanced')) &&
-            isBritish(voice.lang)
+        result = voices.find(v =>
+            v.name.includes(name) &&
+            (v.name.includes('Premium') || v.name.includes('Enhanced')) &&
+            isBritish(v.lang)
         );
-        if (englishVoice) return englishVoice;
+        if (result) return result;
     }
 
-    // 2. Try to find preferred voices that are 'localService' (usually higher quality/downloaded)
+    // 2. 영국식 + 로컬 설치(localService)
     for (const name of targetNames) {
-        englishVoice = voices.find(voice =>
-            voice.name.includes(name) &&
-            voice.localService === true &&
-            isBritish(voice.lang)
+        result = voices.find(v =>
+            v.name.includes(name) &&
+            v.localService === true &&
+            isBritish(v.lang)
         );
-        if (englishVoice) return englishVoice;
+        if (result) return result;
     }
 
-    // 3. Fallback to any preferred voice name (Standard quality)
+    // 3. 영국식 + 선호 이름 (표준)
     for (const name of targetNames) {
-        englishVoice = voices.find(voice =>
-            voice.name.includes(name) &&
-            isBritish(voice.lang)
+        result = voices.find(v => v.name.includes(name) && isBritish(v.lang));
+        if (result) return result;
+    }
+
+    // 4. 영국식 + Female/Male 키워드 포함
+    const genderKeyword = gender === 'female' ? 'female' : 'male';
+    result = voices.find(v =>
+        isBritish(v.lang) &&
+        v.name.toLowerCase().includes(genderKeyword) &&
+        !isNovelty(v)
+    );
+    if (result) return result;
+
+    // 5. 영국식 + Novelty 제외
+    result = voices.find(v => isBritish(v.lang) && !isNovelty(v));
+    if (result) return result;
+
+    // --- 🌐 전체 영어로 폴백 (Kate가 en-US 등으로 분류된 경우 커버) ---
+
+    // 6. 전체 영어 + Premium/Enhanced + 선호 이름
+    for (const name of targetNames) {
+        result = voices.find(v =>
+            v.name.includes(name) &&
+            (v.name.includes('Premium') || v.name.includes('Enhanced')) &&
+            isEnglish(v.lang)
         );
-        if (englishVoice) return englishVoice;
+        if (result) return result;
     }
 
-    // 3. Fallback: Any voice with Gender in the name (Best attempt for unknown voices)
-    if (!englishVoice) {
-        const genderKeyword = gender === 'female' ? 'Female' : 'Male';
-        englishVoice = voices.find(
-            (voice) => isBritish(voice.lang) &&
-                voice.name.toLowerCase().includes(genderKeyword.toLowerCase())
+    // 7. 전체 영어 + 로컬 설치 + 선호 이름
+    for (const name of targetNames) {
+        result = voices.find(v =>
+            v.name.includes(name) &&
+            v.localService === true &&
+            isEnglish(v.lang)
         );
+        if (result) return result;
     }
 
-    // 4. Final Fallback: Any British voice that is NOT novelty (Avoid Rocko, etc.)
-    if (!englishVoice) {
-        const NOVELTY_VOICES = [
-            'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
-            'Deranged', 'Good News', 'Hysterical', 'Junior', 'Kathy', 'Pipe Organ',
-            'Princess', 'Ralph', 'Trinoids', 'Whisper', 'Zarvox', 'Rocko', 'Shelley',
-            'Superstar', 'Grandma', 'Grandpa', 'Eddy', 'Flo', 'Reed', 'Sandy', 'Majed'
-        ];
-
-        englishVoice = voices.find(voice =>
-            isBritish(voice.lang) &&
-            !NOVELTY_VOICES.some(novelty => voice.name.includes(novelty))
-        );
+    // 8. 전체 영어 + 선호 이름 (표준)
+    for (const name of targetNames) {
+        result = voices.find(v => v.name.includes(name) && isEnglish(v.lang));
+        if (result) return result;
     }
 
-    // 5. Absolute Last Resort: Just return the first British voice found (even if novelty, better than nothing)
-    if (!englishVoice) {
-        englishVoice = voices.find(voice => isBritish(voice.lang));
-    }
-
-    return englishVoice || null;
+    // 9. 영국식 (최후 수단, Novelty 포함)
+    result = voices.find(v => isBritish(v.lang));
+    return result || null;
 };
