@@ -18,21 +18,30 @@ const isEnglish = (lang: string): boolean => {
  * 여성 목소리 이름 목록 (이름 기반 성별 추정).
  */
 const FEMALE_VOICE_NAMES = [
+    // 영국식
     'Kate', 'Serena', 'Stephanie', 'Martha', 'Catherine', 'Tessa',
-    'Moira', 'Fiona', 'Samantha', 'Victoria', 'Susan', 'Karen',
-    'Nicky', 'Sandy', 'Ava', 'Allison', 'Alice', 'Anna', 'Shelley',
-    'Flo', 'Grandma', 'Kathy', 'Princess', 'Zarvox', 'Bells',
-    'Bubbles', 'Whisper', 'Superstar', 'Siobhan',
+    // 기타 영어권 여성
+    'Moira',       // 아일랜드
+    'Karen',       // 호주
+    'Fiona',       // 스코틀랜드
+    'Samantha', 'Victoria', 'Susan', 'Nicky', 'Sandy', 'Ava',
+    'Allison', 'Alice', 'Anna', 'Shelley', 'Flo', 'Grandma',
+    'Kathy', 'Princess', 'Zarvox', 'Bells', 'Bubbles', 'Whisper',
+    'Superstar', 'Siobhan', 'Zoe', 'Veena', 'Damayanti',
 ];
 
 /**
  * 남성 목소리 이름 목록 (이름 기반 성별 추정).
  */
 const MALE_VOICE_NAMES = [
-    'Daniel', 'Arthur', 'Gordon', 'Alex', 'Fred', 'Albert',
-    'Eddy', 'Reed', 'Grandpa', 'Rocko', 'Thomas', 'Oliver', 'Rishi',
-    'Ralph', 'Junior', 'Boing', 'Deranged', 'Hysterical', 'Trinoids',
-    'Bad News', 'Good News', 'Majed', 'Cellos', 'Bahh', 'Pipe Organ',
+    // 영국식
+    'Daniel', 'Arthur', 'Gordon',
+    // 기타 영어권 남성
+    'Rishi',       // 인도계 영어
+    'Alex', 'Fred', 'Albert', 'Eddy', 'Reed', 'Grandpa', 'Rocko',
+    'Thomas', 'Oliver', 'Ralph', 'Junior', 'Boing', 'Deranged',
+    'Hysterical', 'Trinoids', 'Bad News', 'Good News', 'Majed',
+    'Cellos', 'Bahh', 'Pipe Organ', 'Tom', 'Bruce', 'Lee',
 ];
 
 /**
@@ -48,6 +57,39 @@ export const classifyVoiceGender = (
     if (name.toLowerCase().includes('female')) return 'female';
     if (name.toLowerCase().includes('male')) return 'male';
     return 'unknown';
+};
+
+/**
+ * 동일한 이름의 중복 목소리를 제거합니다.
+ * 품질 우선순위: Premium > Enhanced > localService > 일반
+ */
+export const deduplicateVoices = (
+    voices: SpeechSynthesisVoice[]
+): SpeechSynthesisVoice[] => {
+    const seen = new Map<string, SpeechSynthesisVoice>();
+
+    for (const voice of voices) {
+        // 이름에서 품질 접미사 제거하여 기본 이름 추출
+        const baseName = voice.name
+            .replace(/(\s*(Premium|Enhanced|Compact|Standard|Neural))$/i, '')
+            .trim();
+
+        const existing = seen.get(baseName);
+        if (!existing) {
+            seen.set(baseName, voice);
+        } else {
+            // 더 좋은 품질 버전으로 교체
+            const isPremium = (v: SpeechSynthesisVoice) =>
+                v.name.includes('Premium') || v.name.includes('Enhanced');
+            if (isPremium(voice) && !isPremium(existing)) {
+                seen.set(baseName, voice);
+            } else if (voice.localService && !existing.localService) {
+                seen.set(baseName, voice);
+            }
+        }
+    }
+
+    return Array.from(seen.values());
 };
 
 /**

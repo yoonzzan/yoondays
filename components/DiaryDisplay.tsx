@@ -5,7 +5,7 @@ import { StopIcon } from './icons/StopIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 
-import { getBritishVoice, isBritish, classifyVoiceGender } from '../utils/speech';
+import { getBritishVoice, isBritish, classifyVoiceGender, deduplicateVoices } from '../utils/speech';
 import { DiarySentence, GrammarCheckResult } from '../types';
 
 interface DiaryDisplayProps {
@@ -36,43 +36,62 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
   const [activeUtteranceLang, setActiveUtteranceLang] = useState<'english' | 'korean' | null>(null);
   const [voiceGender, setVoiceGender] = useState<'female' | 'male'>('female');
   const [currentVoiceName, setCurrentVoiceName] = useState<string>('');
-  const [userSelectedVoiceURI, setUserSelectedVoiceURI] = useState<string | null>(null); // Manually selected voice
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]); // For dropdown
+  const [userSelectedVoiceURI, setUserSelectedVoiceURI] = useState<string | null>(null);
+  // ref: effect 재실행 없이 최신 선택값을 읽기 위함 (race condition 방지)
+  const userSelectedVoiceURIRef = useRef<string | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<{ main: SpeechSynthesisVoice[]; other: SpeechSynthesisVoice[] }>({ main: [], other: [] });
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
 
   useEffect(() => {
-    // Load saved voice preference
+    // localStorage에서 저장된 음성 불러오기
     const savedURI = localStorage.getItem('english-diary-voice-uri');
-    if (savedURI) setUserSelectedVoiceURI(savedURI);
+    if (savedURI) {
+      userSelectedVoiceURIRef.current = savedURI; // ref 먼저 업데이트 (effect 재실행 방지)
+      setUserSelectedVoiceURI(savedURI);           // UI 표시용 state 업데이트
+    }
   }, []);
+
+  // state 변경 시 ref도 동기화 (effect 밖에서 최신값 참조용)
+  useEffect(() => {
+    userSelectedVoiceURIRef.current = userSelectedVoiceURI;
+  }, [userSelectedVoiceURI]);
 
   useEffect(() => {
     const updateVoiceName = () => {
       voicesRef.current = window.speechSynthesis.getVoices();
 
-      // 모든 영어 음성 중 현재 성별에 맞는 것만 필터링
-      const allEnglishVoices = voicesRef.current.filter(v =>
+      // 음성 목록이 아직 비어있으면 스킵 (타이머가 재시도 예정)
+      if (voicesRef.current.length === 0) return;
+
+      // 모든 영어 음성, 중복 제거
+      const allEnglish = voicesRef.current.filter(v =>
         v.lang.replace('_', '-').toLowerCase().startsWith('en')
       );
-      const genderedVoices = allEnglishVoices.filter(v => {
-        const g = classifyVoiceGender(v);
-        return g === voiceGender || g === 'unknown';
-      });
+      const deduped = deduplicateVoices(allEnglish);
+
+      // 성별별 엄격하게 필터 (unknown은 별도 그룹으로)
+      const genderedVoices = deduped.filter(v => classifyVoiceGender(v) === voiceGender);
+      const unknownVoices = deduped.filter(v => classifyVoiceGender(v) === 'unknown');
+
       // 영국식 우선 정렬
-      const sorted = [
-        ...genderedVoices.filter(v => isBritish(v.lang)),
-        ...genderedVoices.filter(v => !isBritish(v.lang)),
+      const sortBritishFirst = (arr: SpeechSynthesisVoice[]) => [
+        ...arr.filter(v => isBritish(v.lang)),
+        ...arr.filter(v => !isBritish(v.lang)),
       ];
-      setAvailableVoices(sorted);
+
+      setAvailableVoices({
+        main: sortBritishFirst(genderedVoices),
+        other: sortBritishFirst(unknownVoices),
+      });
 
       let voice: SpeechSynthesisVoice | null = null;
 
-      // 1. Try User Selection first
-      if (userSelectedVoiceURI) {
-        voice = voicesRef.current.find(v => v.voiceURI === userSelectedVoiceURI) || null;
+      // ref로 읽어서 effect 재실행 없이 최신 선택값 참조
+      const savedURI = userSelectedVoiceURIRef.current;
+      if (savedURI) {
+        voice = voicesRef.current.find(v => v.voiceURI === savedURI) || null;
       }
 
-      // 2. If no user selection or voice not found, use auto-selection
       if (!voice) {
         voice = getBritishVoice(voicesRef.current, voiceGender);
       }
@@ -80,17 +99,28 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
       setCurrentVoiceName(voice ? `${voice.name}` : 'Default');
     };
 
-    // Initial load attempt
+    // 즉시 1회 시도
     updateVoiceName();
 
-    // Listener for async loading
+    // voiceschanged 이벤트 리스너 등록
     window.speechSynthesis.addEventListener('voiceschanged', updateVoiceName);
+
+    // iOS 프로덕션 대응: voiceschanged를 놓쳤을 경우를 위한 재시도 타이머
+    // (iOS에서 음성 로드는 보통 300~700ms 소요)
+    const t1 = setTimeout(updateVoiceName, 200);
+    const t2 = setTimeout(updateVoiceName, 600);
+    const t3 = setTimeout(updateVoiceName, 1200);
 
     return () => {
       window.speechSynthesis.removeEventListener('voiceschanged', updateVoiceName);
       window.speechSynthesis.cancel();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
     };
-  }, [voiceGender, userSelectedVoiceURI]);
+    // userSelectedVoiceURI를 의존성에서 제거: ref로 최신값을 읽으므로 effect 재실행 불필요
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceGender]);
 
   const handleManualVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const uri = e.target.value;
@@ -277,9 +307,9 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
               >
                 <option value="auto">🎯 Auto (Best Available)</option>
                 {/* 🇬🇧 영국식 발음 그룹 */}
-                {availableVoices.filter(v => isBritish(v.lang)).length > 0 && (
+                {availableVoices.main.filter(v => isBritish(v.lang)).length > 0 && (
                   <optgroup label="🇬🇧 영국식 발음">
-                    {availableVoices
+                    {availableVoices.main
                       .filter(v => isBritish(v.lang))
                       .map(v => (
                         <option key={v.voiceURI} value={v.voiceURI}>
@@ -289,15 +319,25 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
                   </optgroup>
                 )}
                 {/* 기타 영어 그룹 */}
-                {availableVoices.filter(v => !isBritish(v.lang)).length > 0 && (
+                {availableVoices.main.filter(v => !isBritish(v.lang)).length > 0 && (
                   <optgroup label="기타 영어">
-                    {availableVoices
+                    {availableVoices.main
                       .filter(v => !isBritish(v.lang))
                       .map(v => (
                         <option key={v.voiceURI} value={v.voiceURI}>
                           {v.name}
                         </option>
                       ))}
+                  </optgroup>
+                )}
+                {/* 성별 미분류 (최하단) */}
+                {availableVoices.other.length > 0 && (
+                  <optgroup label="기타">
+                    {availableVoices.other.map(v => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
+                      </option>
+                    ))}
                   </optgroup>
                 )}
               </select>
