@@ -262,72 +262,74 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
           </div>
         </div>
 
-        {/* Voice Quality Debug & Guide Info */}
-        <div className="text-xs text-gray-500 px-1 mt-2">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-            <div className="flex items-center space-x-2">
-              <span className="whitespace-nowrap">Voice:</span>
-              <select
-                className="bg-white border border-gray-300 text-gray-700 text-xs rounded-md p-1.5 max-w-[220px] shadow-sm focus:ring-1 focus:ring-sky-500 focus:border-sky-500 outline-none"
-                value={userSelectedVoiceURI ?? ''}
-                onChange={handleManualVoiceChange}
-              >
-                {/* Auto: getBritishVoice가 최적 음성 선택 (한국어 TTS 방지) */}
-                <option value="">🎯 Auto (Best English)</option>
+        {/* Voice Selector — Compact */}
+        <div className="flex items-center gap-2 px-1 mt-2">
+          {/* 🔊 아이콘 */}
+          <span className="text-base shrink-0" aria-hidden="true">🔊</span>
 
-                {/* 👩 여성 음성 */}
-                {voicesByGender.female.length > 0 && (
-                  <optgroup label="👩 Female">
-                    {voicesByGender.female.map((v: SpeechSynthesisVoice) => (
-                      <option key={v.voiceURI} value={v.voiceURI}>
-                        {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
+          {/* 셀렉트 — 가능한 넓게 */}
+          <select
+            className="flex-1 min-w-0 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 cursor-pointer"
+            value={userSelectedVoiceURI ?? ''}
+            onChange={handleManualVoiceChange}
+          >
+            <option value="">🎯 Auto (Best English)</option>
+            {voicesByGender.female.length > 0 && (
+              <optgroup label="👩 Female">
+                {voicesByGender.female.map((v: SpeechSynthesisVoice) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {voicesByGender.male.length > 0 && (
+              <optgroup label="👨 Male">
+                {voicesByGender.male.map((v: SpeechSynthesisVoice) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
 
-                {/* 👨 남성 음성 */}
-                {voicesByGender.male.length > 0 && (
-                  <optgroup label="👨 Male">
-                    {voicesByGender.male.map((v: SpeechSynthesisVoice) => (
-                      <option key={v.voiceURI} value={v.voiceURI}>
-                        {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-
-            <button
-              onClick={() => setShowVoiceGuide(!showVoiceGuide)}
-              className="text-sky-600 underline hover:text-sky-800 text-right sm:text-left"
-            >
-              목소리가 이상한가요?
-            </button>
-          </div>
-
-          {/* 현재 사용 중인 음성 표시 */}
-          <p className="mt-1 text-gray-400">
-            Active: <span className="font-medium text-gray-600">{currentVoiceName}</span>
-          </p>
-
-          {showVoiceGuide && (
-            <div className="mt-2 p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-900 text-xs leading-relaxed animate-fade-in-up">
-              <p className="font-bold mb-1">📱 아이폰 음성 문제 해결 가이드:</p>
-              <ul className="list-disc list-inside space-y-1 ml-1">
-                <li><strong>자동(Auto)</strong> 모드에서 'Rocko' 같은 기계음이 들리면, 위 목록에서 <strong>직접 목소리를 선택</strong>해 보세요.</li>
-                <li>목록에 원하는 목소리(Kate 등)가 없다면:
-                  <ol className="list-decimal list-inside ml-4 mt-1 text-amber-800">
-                    <li><strong>설정 &gt; 손쉬운 사용 &gt; 콘텐츠 말하기 &gt; 음성</strong>으로 이동</li>
-                    <li><strong>영어 &gt; 영어(영국)</strong>에서 Kate(Premium) 등을 다운로드</li>
-                    <li>다운로드 후 <strong>폰을 재시작</strong>하거나 앱을 새로고침하세요.</li>
-                  </ol>
-                </li>
-              </ul>
-            </div>
+          {/* Auto일 때만 실제 선택된 음성 이름을 배지로 표시 */}
+          {!userSelectedVoiceURI && currentVoiceName && currentVoiceName !== 'Auto' && (
+            <span className="shrink-0 text-xs text-sky-600 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+              {currentVoiceName.replace('Auto → ', '')}
+            </span>
           )}
+
+          {/* ℹ️ 도움말 버튼 */}
+          <button
+            onClick={() => setShowVoiceGuide(!showVoiceGuide)}
+            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:text-sky-500 hover:bg-sky-50 transition-colors"
+            title="목소리가 이상한가요?"
+            aria-label="음성 도움말"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 108.94 6.94zM10 15a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+          </button>
         </div>
+
+        {/* 도움말 패널 */}
+        {showVoiceGuide && (
+          <div className="mx-1 mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-amber-900 text-xs leading-relaxed">
+            <p className="font-bold mb-1">📱 아이폰 음성 문제 해결</p>
+            <ul className="list-disc list-inside space-y-1 ml-1">
+              <li>기계음이 들리면 위 목록에서 <strong>직접 목소리를 선택</strong>하세요.</li>
+              <li>목록에 Kate 등이 없다면:
+                <ol className="list-decimal list-inside ml-4 mt-1 text-amber-800">
+                  <li><strong>설정 &gt; 손쉬운 사용 &gt; 콘텐츠 말하기 &gt; 음성</strong></li>
+                  <li><strong>영어 &gt; 영어(영국)</strong>에서 Kate(Premium) 다운로드</li>
+                  <li>다운로드 후 <strong>앱 새로고침</strong></li>
+                </ol>
+              </li>
+            </ul>
+          </div>
+        )}
 
         {diarySentences.map((sentence, index) => (
           <div key={index} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm transition-all duration-300">
