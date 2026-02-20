@@ -5,7 +5,7 @@ import { StopIcon } from './icons/StopIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 
-import { isBritish, classifyVoiceGender, deduplicateVoices } from '../utils/speech';
+import { getBritishVoice, isBritish, classifyVoiceGender, deduplicateVoices } from '../utils/speech';
 import { DiarySentence, GrammarCheckResult } from '../types';
 
 interface DiaryDisplayProps {
@@ -34,13 +34,14 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
   const [speechStatus, setSpeechStatus] = useState<'idle' | 'playing' | 'paused'>('idle');
   const [activeUtteranceIndex, setActiveUtteranceIndex] = useState<number | null>(null);
   const [activeUtteranceLang, setActiveUtteranceLang] = useState<'english' | 'korean' | null>(null);
-  const [voiceGender, setVoiceGender] = useState<'female' | 'male'>('female');
-  const [currentVoiceName, setCurrentVoiceName] = useState<string>('System Default');
+  const [currentVoiceName, setCurrentVoiceName] = useState<string>('Auto');
   const [userSelectedVoiceURI, setUserSelectedVoiceURI] = useState<string | null>(null);
-  // ref: effect 재실행 없이 최신값 참조 (race condition 방지)
   const userSelectedVoiceURIRef = useRef<string | null>(null);
-  // 평탄화된 음성 목록 (gender 탭에 맞는 것만)
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  // 성별로 분류된 음성 목록
+  const [voicesByGender, setVoicesByGender] = useState<{
+    female: SpeechSynthesisVoice[];
+    male: SpeechSynthesisVoice[];
+  }>({ female: [], male: [] });
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
 
   useEffect(() => {
@@ -58,68 +59,65 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
   }, [userSelectedVoiceURI]);
 
   useEffect(() => {
-    const updateVoiceName = () => {
+    const updateVoices = () => {
       voicesRef.current = window.speechSynthesis.getVoices();
-
-      // 음성 목록이 아직 비어있으면 스킵 (타이머가 재시도 예정)
       if (voicesRef.current.length === 0) return;
 
-      // 모든 영어 음성 (lang en- 또는 이름으로 알려진 음성 포함)
-      const allEnglish = voicesRef.current.filter(v => {
-        const langOk = v.lang.replace('_', '-').toLowerCase().startsWith('en');
-        const nameOk = classifyVoiceGender(v) !== 'unknown';
-        return langOk || nameOk;
-      });
-      const deduped = deduplicateVoices(allEnglish);
+      // 모든 영어 음성 (lang en- 또는 이름으로 알려진 것 포함), 중복 제거
+      const allEnglish = deduplicateVoices(
+        voicesRef.current.filter(v => {
+          const langOk = v.lang.replace('_', '-').toLowerCase().startsWith('en');
+          const nameOk = classifyVoiceGender(v) !== 'unknown';
+          return langOk || nameOk;
+        })
+      );
 
-      // 현재 gender 탭에 맞는 음성만 필터 + 영국식 우선 정렬
-      const filtered = deduped.filter(v => classifyVoiceGender(v) === voiceGender);
-      const sorted = [
-        ...filtered.filter(v => isBritish(v.lang)),
-        ...filtered.filter(v => !isBritish(v.lang)),
+      // 영국식 우선 정렬 함수
+      const sortBritishFirst = (arr: SpeechSynthesisVoice[]) => [
+        ...arr.filter(v => isBritish(v.lang)),
+        ...arr.filter(v => !isBritish(v.lang)),
       ];
-      setAvailableVoices(sorted);
 
-      // 현재 선택된 음성 이름 표시 (드롭다운 하단 Active 표시용)
+      setVoicesByGender({
+        female: sortBritishFirst(allEnglish.filter(v => classifyVoiceGender(v) === 'female')),
+        male: sortBritishFirst(allEnglish.filter(v => classifyVoiceGender(v) === 'male')),
+      });
+
+      // Active 음성 이름 표시 업데이트
       const savedURI = userSelectedVoiceURIRef.current;
       if (savedURI) {
         const selected = voicesRef.current.find(v => v.voiceURI === savedURI);
-        setCurrentVoiceName(selected ? selected.name : 'System Default');
+        setCurrentVoiceName(selected ? selected.name : 'Auto');
       } else {
-        setCurrentVoiceName('System Default');
+        // Auto: getBritishVoice가 선택할 음성 이름 표시
+        const autoVoice = getBritishVoice(voicesRef.current, 'female');
+        setCurrentVoiceName(autoVoice ? `Auto → ${autoVoice.name}` : 'Auto');
       }
     };
 
-    // 즉시 1회 시도
-    updateVoiceName();
-
-    // voiceschanged 이벤트 리스너 등록
-    window.speechSynthesis.addEventListener('voiceschanged', updateVoiceName);
-
-    // iOS 프로덕션 대응: voiceschanged를 놓쳤을 경우를 위한 재시도 타이머
-    // (iOS에서 음성 로드는 보통 300~700ms 소요)
-    const t1 = setTimeout(updateVoiceName, 200);
-    const t2 = setTimeout(updateVoiceName, 600);
-    const t3 = setTimeout(updateVoiceName, 1200);
+    updateVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', updateVoices);
+    const t1 = setTimeout(updateVoices, 200);
+    const t2 = setTimeout(updateVoices, 600);
+    const t3 = setTimeout(updateVoices, 1200);
 
     return () => {
-      window.speechSynthesis.removeEventListener('voiceschanged', updateVoiceName);
+      window.speechSynthesis.removeEventListener('voiceschanged', updateVoices);
       window.speechSynthesis.cancel();
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
     };
-    // userSelectedVoiceURI를 의존성에서 제거: ref로 최신값을 읽으므로 effect 재실행 불필요
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceGender]);
+  }, []);
 
   const handleManualVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const uri = e.target.value;
     if (!uri) {
-      // System Default 선택
       setUserSelectedVoiceURI(null);
       userSelectedVoiceURIRef.current = null;
-      setCurrentVoiceName('System Default');
+      const autoVoice = getBritishVoice(voicesRef.current, 'female');
+      setCurrentVoiceName(autoVoice ? `Auto → ${autoVoice.name}` : 'Auto');
       localStorage.removeItem('english-diary-voice-uri');
     } else {
       setUserSelectedVoiceURI(uri);
@@ -128,14 +126,6 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
       setCurrentVoiceName(voice ? voice.name : uri);
       localStorage.setItem('english-diary-voice-uri', uri);
     }
-  };
-
-  // 성볔 탭 전환 시: 이전 선택 초기화 → Auto가 새 성볔에 맞는 최적 음성 선택
-  const handleGenderChange = (gender: 'female' | 'male') => {
-    setVoiceGender(gender);
-    setUserSelectedVoiceURI(null);
-    userSelectedVoiceURIRef.current = null;
-    localStorage.removeItem('english-diary-voice-uri');
   };
 
   const handleStop = () => {
@@ -150,7 +140,7 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
       handleStop();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speechRate, voiceGender]);
+  }, [speechRate]);
 
   const togglePlayPause = (text: string, lang: 'english' | 'korean', index: number) => {
     if (!text || !window.speechSynthesis) {
@@ -179,15 +169,15 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
         if (lang === 'english') {
           const savedURI = userSelectedVoiceURIRef.current;
           if (savedURI) {
-            // 사용자가 직접 선택한 음성
+            // 사용자가 직접 선택한 특정 음성
             const selectedVoice = voicesRef.current.find(v => v.voiceURI === savedURI);
             utterance.voice = selectedVoice || null;
             utterance.lang = selectedVoice?.lang || 'en-GB';
           } else {
-            // System Default: voice를 지정하지 않음 → 기기 기본 음성 사용
-            // lang 힌트를 en-GB로 주면 Kate 같은 영국식 음성이 설치된 경우 자동 선택
-            utterance.voice = null;
-            utterance.lang = 'en-GB';
+            // Auto: getBritishVoice로 최적 영국식/영어 음성 선택 (한국어 방지)
+            const autoVoice = getBritishVoice(voicesRef.current, 'female');
+            utterance.voice = autoVoice;
+            utterance.lang = autoVoice?.lang || 'en-GB';
           }
         } else {
           utterance.lang = 'ko-KR';
@@ -241,31 +231,8 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
 
     return (
       <div className="space-y-6">
-        {/* Audio Controls: Gender & Speed */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
-          {/* Gender Selection */}
-          <div className="flex items-center space-x-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex-shrink-0 self-start sm:self-center">
-            <button
-              onClick={() => handleGenderChange('female')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${voiceGender === 'female'
-                ? 'bg-rose-100 text-rose-700 shadow-sm ring-1 ring-rose-200'
-                : 'text-gray-400 hover:bg-gray-50'
-                }`}
-            >
-              👩 Female
-            </button>
-            <button
-              onClick={() => handleGenderChange('male')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${voiceGender === 'male'
-                ? 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200'
-                : 'text-gray-400 hover:bg-gray-50'
-                }`}
-            >
-              👨 Male
-            </button>
-          </div>
-
+        {/* Audio Controls: Speed Only (Gender is now in the voice dropdown) */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
           {/* Speed Control */}
           <div className="flex-grow flex flex-col sm:flex-row items-center sm:space-x-3 gap-2 sm:gap-0 w-full sm:w-auto">
             <label htmlFor="speech-rate-slider" className="font-semibold text-gray-700 text-sm whitespace-nowrap min-w-[70px]">
@@ -305,33 +272,28 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
                 value={userSelectedVoiceURI ?? ''}
                 onChange={handleManualVoiceChange}
               >
-                {/* 기본값: 기기 기본 음성 */}
-                <option value="">🎛️ System Default</option>
+                {/* Auto: getBritishVoice가 최적 음성 선택 (한국어 TTS 방지) */}
+                <option value="">🎯 Auto (Best English)</option>
 
-                {/* 🇬🇧 영국식 발음 - 항상 표시 */}
-                <optgroup label="🇬🇧 영국식 발음">
-                  {availableVoices.filter((v: SpeechSynthesisVoice) => isBritish(v.lang)).length > 0
-                    ? availableVoices
-                      .filter((v: SpeechSynthesisVoice) => isBritish(v.lang))
-                      .map((v: SpeechSynthesisVoice) => (
-                        <option key={v.voiceURI} value={v.voiceURI}>
-                          🇬🇧 {v.name}
-                        </option>
-                      ))
-                    : <option value="" disabled>(이 기기에서 영국식 음성 없음)</option>
-                  }
-                </optgroup>
+                {/* 👩 여성 음성 */}
+                {voicesByGender.female.length > 0 && (
+                  <optgroup label="👩 Female">
+                    {voicesByGender.female.map((v: SpeechSynthesisVoice) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
 
-                {/* 기타 영어 */}
-                {availableVoices.filter((v: SpeechSynthesisVoice) => !isBritish(v.lang)).length > 0 && (
-                  <optgroup label="기타 영어">
-                    {availableVoices
-                      .filter((v: SpeechSynthesisVoice) => !isBritish(v.lang))
-                      .map((v: SpeechSynthesisVoice) => (
-                        <option key={v.voiceURI} value={v.voiceURI}>
-                          {v.name}
-                        </option>
-                      ))}
+                {/* 👨 남성 음성 */}
+                {voicesByGender.male.length > 0 && (
+                  <optgroup label="👨 Male">
+                    {voicesByGender.male.map((v: SpeechSynthesisVoice) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {isBritish(v.lang) ? '🇬🇧 ' : ''}{v.name}
+                      </option>
+                    ))}
                   </optgroup>
                 )}
               </select>
