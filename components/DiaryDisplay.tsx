@@ -317,15 +317,33 @@ const DiaryDisplay: React.FC<DiaryDisplayProps> = ({
         {/* 도움말 패널 */}
         {showVoiceGuide && (
           <div className="mx-1 mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-amber-900 text-xs leading-relaxed">
-            <p className="font-bold mb-1">📱 아이폰 음성 문제 해결</p>
-            <ul className="list-disc list-inside space-y-1 ml-1">
-              <li>기계음이 들리면 위 목록에서 <strong>직접 목소리를 선택</strong>하세요.</li>
-              <li>목록에 Kate 등이 없다면:
-                <ol className="list-decimal list-inside ml-4 mt-1 text-amber-800">
-                  <li><strong>설정 &gt; 손쉬운 사용 &gt; 콘텐츠 말하기 &gt; 음성</strong></li>
-                  <li><strong>영어 &gt; 영어(영국)</strong>에서 Kate(Premium) 다운로드</li>
-                  <li>다운로드 후 <strong>앱 새로고침</strong></li>
-                </ol>
+            <p className="font-bold mb-2">📱 음성이 이상하거나 원하는 목소리가 없다면?</p>
+            <ul className="space-y-2 ml-1">
+              <li className="flex gap-1.5">
+                <span className="shrink-0">1.</span>
+                <span>목록에서 <strong>🇬🇧 표시된 영국식 음성</strong>을 직접 선택해 보세요.</span>
+              </li>
+              <li className="flex gap-1.5">
+                <span className="shrink-0">2.</span>
+                <span>
+                  <strong>Kate 등 특정 음성이 목록에 없는 경우</strong> — iOS Safari는 보안 정책상
+                  설치된 프리미엄 음성도 웹앱에 노출하지 않을 수 있습니다.
+                </span>
+              </li>
+              <li className="flex gap-1.5">
+                <span className="shrink-0">💡</span>
+                <span>
+                  <strong>해결 방법:</strong> Safari 주소창 하단 공유 버튼 →
+                  <strong> 홈 화면에 추가</strong>로 앱처럼 실행하면 더 많은 음성이
+                  나타날 수 있습니다.
+                </span>
+              </li>
+              <li className="flex gap-1.5">
+                <span className="shrink-0">🔧</span>
+                <span>
+                  영어 음성이 아예 없다면: <strong>설정 &gt; 손쉬운 사용 &gt;
+                    콘텐츠 말하기 &gt; 음성 &gt; 영어(영국)</strong>에서 다운로드 후 새로고침
+                </span>
               </li>
             </ul>
           </div>
